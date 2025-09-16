@@ -3,6 +3,7 @@ paths:
   standard_zone: "/app/data/standard_zone"
   consumption_zone: "/app/data/consumption_zone"
   rejection_zone: "/app/data/rejection_zone"
+names:
   input_file: "energy_usage.csv"
-app_name: "EnergyUsagePipeline"
-file_name: "energy_usage"
+  file_prefix: "energy_usage"
+  core_app: "EnergyUsagePipeline"

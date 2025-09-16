@@ -22,7 +22,7 @@ If using windows, also include:
 ## Structure
 - `src/pipeline.py` - main pipeline
 - `tests/test_pipeline.py` - unit + integration tests
-- `requirements.txt` - packages for local runs
+- `requirements.txt` - packages for local runs (packages should also be reflected in the Dockerfile)
 - `Dockerfile` - used to run everything in a container
 - `config.yaml` - contains paths and names for reusability
 - `/data/raw_zone/` - Folder where the input file should be set
@@ -38,24 +38,45 @@ Assuming project folder is mounted into container at `/app` (see Dockerfile):
 docker build -t pyspark-env .
 ```
 
-**Run app:**
+**Run data pipeline app:**
 ```bash
 docker run -it --rm -v "${PWD}:/app" pyspark-env python /app/src/pipeline.py
+```
+
+**Run test cases:**
+```bash
+docker run -it --rm -v ${PWD}:/app pyspark-env pytest -v
 ```
 
 ## Methodology: 
 
 **Approach and key decisions**
-TBA
+I wanted to emulate the medallion architecture I used in previous workplaces. This is why I set it up as the raw zone, the standard zone and the consumption zone.
+The raw zone acts as the destination for the source file, whether it's loaded from an SFTP or a different process. Files should be unprocessed and history should be maintained.
+The standard zone contains records with errors removed, schema enforced, and an additional column "received_at" which tracks when a file was received. This will be important for error tracing.
+The consumption zone contains the cleaned, aggregated records, with timestamp fields reformatted.
+There is also a rejection zone, where error records caught in the standard zone are quarantined.
+
+In terms of the final result, I noticed that a customer may have multiple records, for example readings at different hours. I wasn't sure how the user would prefer to have this impact the start_time field. Should it be kept as is? Keep only the earliest? Change the timestamp to a date instead?
 
 **Two risks to reliability at scale**
-TBA
+1)
+2)
 
 **Next steps for production readiness**
-TBA
+1) Write consumption zone data to an table that can be queried like in Databricks
+2) Check with end user that the consumption zone record has the correct schema, correct values
+3) Remove all Pyspark actions used for logging to improve performance
+4) Change hardcoded file name to a reuseable one
+5) Determine and add merge logic into consumption zone (rather than keeping history like in RW and SZ)
 
 **Data quality considerations**
+1) Some of the data clean up steps assume that non-null data is valid. So an incorrectly formatted timestamp value, or a field that fails to progress through the clean up steps, might break the logic. This would need to be handled at the row level.
+2) 
 
 **CI/CD considerations**
 
 **Metrics considerations**
+1) Query performance on the consumption zone records
+2) Pipeline processing performance (amount of time/resources required to run)
+3) Usage (kwh) data comparison to a reference table
