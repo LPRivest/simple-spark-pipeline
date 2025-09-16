@@ -15,5 +15,7 @@ RUN pip install --no-cache-dir pyspark==3.5.1 pandas pytest pyyaml
 # Working directory
 WORKDIR /app
 
+ENV PYTHONPATH="/app"
+
 # Default command
 CMD ["python"]

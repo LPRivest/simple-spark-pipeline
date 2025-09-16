@@ -9,8 +9,13 @@ import yaml
 with open("/app/config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-# Set the output file name
+# Set the date suffix for this run
 current_date = datetime.today().strftime('%Y%m%d')
+
+# Change start_time field to a utc timestamp 
+def update_timestamp_col(df):
+
+    return df.withColumn("start_time_utc", to_timestamp(col("start_time"), "yyyy-MM-dd'T'HH:mm:ssXXX"))
 
 # Prepare the dataframe for the standard zone
 def process_for_standard(spark_session, input_path, output_path, rejection_path):
@@ -22,11 +27,6 @@ def process_for_standard(spark_session, input_path, output_path, rejection_path)
         StructField("start_time", StringType(), nullable=False)
     ])
 
-    # Set condition on which records will be considered errors
-    invalid_condition = (
-        col("customer_id").isNull() | col("usage_kwh").isNull() | isnan(col("usage_kwh"))
-    )
-
     # Read incoming csv file
     df = spark_session.read \
         .option("header", True) \
@@ -34,15 +34,22 @@ def process_for_standard(spark_session, input_path, output_path, rejection_path)
         .option("mode", "PERMISSIVE") \
         .csv(input_path)
     
+    # Set conditions for error records
+    invalid_condition = (
+        col("customer_id").isNull() | col("usage_kwh").isNull() | isnan(col("usage_kwh"))
+    )
+    
     # Separate invalid records
     invalid_rows = df.filter(invalid_condition)
 
     # If any invalid records are found, reject them
     if invalid_rows.count() > 0:
+
         # For debugging purposes only
         print("Rejection zone data frame:")
         invalid_rows.show(truncate=False)
 
+        # Write records to rejection zone
         invalid_rows.write.mode("overwrite").parquet(rejection_path)
 
     # Keep valid records and add a timestamp column for traceability
@@ -63,7 +70,8 @@ def process_for_standard(spark_session, input_path, output_path, rejection_path)
 def process_for_consumption(spark_session, input_path, output_path):
     df = spark_session.read.option("header", True).parquet(input_path)
 
-    df = df.withColumn("start_time_utc", to_timestamp(col("start_time"), "yyyy-MM-dd'T'HH:mm:ssXXX"))
+    # Change start_time field to a utc timestamp
+    df = update_timestamp_col(df)
 
     # Calculate daily usage for each customer
     df_aggregated = df.groupBy("customer_id") \

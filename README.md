@@ -45,7 +45,7 @@ docker run -it --rm -v "${PWD}:/app" pyspark-env python /app/src/pipeline.py
 
 **Run test cases:**
 ```bash
-docker run -it --rm -v ${PWD}:/app pyspark-env pytest -v
+docker run -it --rm -v "${PWD}:/app" pyspark-env pytest -v
 ```
 
 ## Methodology: 
@@ -60,8 +60,8 @@ There is also a rejection zone, where error records caught in the standard zone 
 In terms of the final result, I noticed that a customer may have multiple records, for example readings at different hours. I wasn't sure how the user would prefer to have this impact the start_time field. Should it be kept as is? Keep only the earliest? Change the timestamp to a date instead?
 
 **Two risks to reliability at scale**
-1)
-2)
+1) A lot of this code isn't very config driven, and has some hard coded values - this makes it not very reuseable, for example if the schema of the source file changes. 
+2) The formats of the data types (especially the date/time columns) is inconsistent and may cause incorrect aggregation down the pipeline.
 
 **Next steps for production readiness**
 1) Write consumption zone data to an table that can be queried like in Databricks
@@ -72,9 +72,11 @@ In terms of the final result, I noticed that a customer may have multiple record
 
 **Data quality considerations**
 1) Some of the data clean up steps assume that non-null data is valid. So an incorrectly formatted timestamp value, or a field that fails to progress through the clean up steps, might break the logic. This would need to be handled at the row level.
-2) 
+2) I typically include both an updated_at field and a received_at field for each incoming record. This is useful for tracking missing, duplicated or error records in production.
 
 **CI/CD considerations**
+1) More unit tests. Which also means refactoring of my code to expose more methods to unit test with.
+2) Maintaining separate dev, test and prod environments, where dev and test only have a subset of the data used in prod.
 
 **Metrics considerations**
 1) Query performance on the consumption zone records
