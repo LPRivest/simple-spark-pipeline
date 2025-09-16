@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import current_timestamp, col, isnan
+from pyspark.sql.functions import current_timestamp, to_timestamp, col, isnan
 from pyspark.sql.types import StructType, StructField, IntegerType, DoubleType, StringType
 from datetime import datetime
 import os
@@ -46,6 +46,8 @@ def process_for_consumption(spark_session, input_path, output_path, rejection_pa
         col("customer_id").isNull() | col("usage_kwh").isNull() | isnan(col("usage_kwh"))
     )
 
+    df = df.withColumn("start_time_utc", to_timestamp(col("start_time"), "yyyy-MM-dd'T'HH:mm:ssXXX"))
+
     # Separate invalid records
     invalid_rows = df.filter(invalid_condition)
 
@@ -56,11 +58,22 @@ def process_for_consumption(spark_session, input_path, output_path, rejection_pa
 
         invalid_rows.write.mode("overwrite").parquet(rejection_path)
 
+    # Keep valid records
+    df = df.filter(~(invalid_condition))
+
     # Process valid records
-    df = df.filter(~(invalid_condition)) \
-            .groupBy("customer_id") \
-            .sum("usage_kwh") \
-            .withColumnRenamed("sum(usage_kwh)", "daily_usage_kwh")
+    df_aggregated = df.groupBy("customer_id") \
+                        .sum("usage_kwh") \
+                        .withColumnRenamed("sum(usage_kwh)", "daily_usage_kwh")
+    
+    df = df.join(df_aggregated,"customer_id", "left") \
+            .select(
+                df.customer_id,
+                df.usage_kwh,
+                df_aggregated.daily_usage_kwh,
+                df.start_time_utc,
+                df.received_at
+            )
 
     # For debugging purposes only
     print("Consumption zone data frame:")
